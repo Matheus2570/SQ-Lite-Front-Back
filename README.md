@@ -24,9 +24,14 @@ O objetivo é permitir o cadastro, visualização e gerenciamento de clientes de
 
 ---
 
-## 🚀 Como rodar o projeto
-
-1. Clone o repositório:  
+## 🚀 Comandos pricipais
 ```bash
-git clone [URL_DO_REPOSITORIO_CLIENTES]
-cd [PASTA_DO_PROJETO_CLIENTES]
+npm install               # Instala dependências do package.json
+npm install express       # Instala Express
+npm install cors          # Instala CORS
+npm install sqlite3       # Instala SQLite3
+node infra.js             # Cria banco de dados / infraestrutura
+node app.js               # Roda o servidor backend
+
+
+
