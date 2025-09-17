@@ -1,11 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, FlatList, TextInput, Button, Alert } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  FlatList,
+  TextInput,
+  Alert,
+  TouchableOpacity
+} from 'react-native';
 
-const API_URL = 'http://10.136.38.150:3000/clientes'; // ✅ porta corrigida
+const API_URL = 'http://192.168.107.27:3000/clientes';
 
 export default function App() {
   const [clientes, setClientes] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
+
   const [idBusca, setIdBusca] = useState('');
+  const [clienteEncontrado, setClienteEncontrado] = useState(null);
+  const [buscaErro, setBuscaErro] = useState('');
+
   const [nome, setNome] = useState('');
   const [cpf, setCpf] = useState('');
   const [email, setEmail] = useState('');
@@ -23,22 +36,38 @@ export default function App() {
     }
   };
 
+  // Refresh (puxar para baixo)
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchClientes();
+    setRefreshing(false);
+  };
+
   // GET por ID
   const fetchClienteById = async () => {
-    if (!idBusca) return;
+    const trimmed = idBusca.trim();
+    setClienteEncontrado(null);
+    setBuscaErro('');
+    if (!trimmed) {
+      setBuscaErro('Informe um ID para buscar.');
+      return;
+    }
     try {
-      const res = await fetch(`${API_URL}/${idBusca}`);
-      if (!res.ok) throw new Error();
+      const res = await fetch(`${API_URL}/${trimmed}`);
+      if (!res.ok) {
+        setBuscaErro('Cliente não encontrado.');
+        return;
+      }
       const data = await res.json();
-      Alert.alert('Cliente encontrado', JSON.stringify(data));
-    } catch {
-      Alert.alert('Erro', 'Cliente não encontrado');
+      setClienteEncontrado(data);
+    } catch (err) {
+      setBuscaErro('Erro ao buscar cliente.');
     }
   };
 
   // ADD cliente
   const addCliente = async () => {
-    if (!nome || !cpf) {
+    if (!nome.trim() || !cpf.trim()) {
       Alert.alert('Erro', 'Nome e CPF são obrigatórios');
       return;
     }
@@ -48,10 +77,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nome, cpf, email, telefone })
       });
-      setNome('');
-      setCpf('');
-      setEmail('');
-      setTelefone('');
+      limparFormulario();
       fetchClientes();
     } catch {
       Alert.alert('Erro', 'Não foi possível adicionar cliente');
@@ -60,8 +86,8 @@ export default function App() {
 
   // UPDATE cliente
   const updateCliente = async () => {
-    if (!idEditar || !nome || !cpf) {
-      Alert.alert('Erro', 'Nome e CPF são obrigatórios');
+    if (!idEditar || !nome.trim() || !cpf.trim()) {
+      Alert.alert('Erro', 'Selecione um cliente e preencha Nome/CPF');
       return;
     }
     try {
@@ -71,10 +97,7 @@ export default function App() {
         body: JSON.stringify({ nome, cpf, email, telefone })
       });
       setIdEditar(null);
-      setNome('');
-      setCpf('');
-      setEmail('');
-      setTelefone('');
+      limparFormulario();
       fetchClientes();
     } catch {
       Alert.alert('Erro', 'Não foi possível atualizar cliente');
@@ -82,14 +105,70 @@ export default function App() {
   };
 
   // DELETE cliente
-  const deleteCliente = async (id) => {
-    try {
-      await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
-      fetchClientes();
-    } catch {
-      Alert.alert('Erro', 'Não foi possível deletar cliente');
-    }
+  const deleteCliente = (id) => {
+    Alert.alert('Confirmar exclusão', 'Deseja realmente excluir este cliente?', [
+      { text: 'Não' },
+      {
+        text: 'Sim',
+        onPress: async () => {
+          try {
+            await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+            if (clienteEncontrado && clienteEncontrado.id === id) {
+              setClienteEncontrado(null);
+              setIdBusca('');
+            }
+            if (idEditar === id) {
+              setIdEditar(null);
+              limparFormulario();
+            }
+            fetchClientes();
+          } catch {
+            Alert.alert('Erro', 'Não foi possível deletar cliente');
+          }
+        }
+      }
+    ]);
   };
+
+  const limparFormulario = () => {
+    setNome('');
+    setCpf('');
+    setEmail('');
+    setTelefone('');
+  };
+
+  const startEdit = (item) => {
+    setIdEditar(item.id);
+    setNome(item.nome ?? '');
+    setCpf(item.cpf ?? '');
+    setEmail(item.email ?? '');
+    setTelefone(item.telefone ?? '');
+  };
+
+  const renderItem = ({ item }) => (
+    <View style={styles.cardRow}>
+      <View style={styles.cardContent}>
+        <Text style={styles.nome}>{item.nome}</Text>
+        <Text style={styles.pequeno}>
+       Cpf: {item.cpf}{"\n"}
+  Email: {item.email ?? "-"}{"\n"}
+  Telefone: {item.telefone ?? "-"}{"\n"}
+  ID: {item.id ?? "-"}
+        </Text>
+      </View>
+      <View style={styles.buttonsRow}>
+        <TouchableOpacity style={styles.buttonSmall} onPress={() => startEdit(item)}>
+          <Text style={styles.buttonSmallText}>Editar</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.buttonSmall, styles.buttonDelete]}
+          onPress={() => deleteCliente(item.id)}
+        >
+          <Text style={styles.buttonSmallText}>Excluir</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 
   useEffect(() => {
     fetchClientes();
@@ -101,37 +180,67 @@ export default function App() {
 
       <FlatList
         data={clientes}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Text>{item.nome} - {item.cpf} - {item.email} - {item.telefone}</Text>
-            <Button title="Editar" onPress={() => {
-              setIdEditar(item.id);
-              setNome(item.nome);
-              setCpf(item.cpf);
-              setEmail(item.email);
-              setTelefone(item.telefone);
-            }} />
-            <Button title="Excluir" color="red" onPress={() => deleteCliente(item.id)} />
-          </View>
-        )}
+        keyExtractor={(item) => String(item.id)}
+        renderItem={renderItem}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        style={styles.flatlist}
       />
 
+      {/* Buscar cliente por ID */}
       <TextInput
         style={styles.input}
         placeholder="Buscar cliente por ID"
         value={idBusca}
-        onChangeText={setIdBusca}
+        onChangeText={(t) => {
+          setIdBusca(t);
+          setBuscaErro('');
+        }}
         keyboardType="numeric"
       />
-      <Button title="Buscar" onPress={fetchClienteById} />
+      <View style={styles.actionRow}>
+        <TouchableOpacity style={styles.button} onPress={fetchClienteById}>
+          <Text style={styles.buttonText}>Buscar por ID</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.button, styles.buttonClear]}
+          onPress={() => {
+            setIdBusca('');
+            setClienteEncontrado(null);
+            setBuscaErro('');
+          }}
+        >
+          <Text style={styles.buttonText}>Limpar</Text>
+        </TouchableOpacity>
+      </View>
+      {buscaErro ? <Text style={styles.erro}>{buscaErro}</Text> : null}
 
-      <TextInput
-        style={styles.input}
-        placeholder="Nome"
-        value={nome}
-        onChangeText={setNome}
-      />
+      {clienteEncontrado && (
+        <View style={styles.card}>
+          <Text style={styles.nome}>{clienteEncontrado.nome}</Text>
+          <Text style={styles.pequeno}>
+            {clienteEncontrado.cpf} • {clienteEncontrado.email ?? '-'} •{' '}
+            {clienteEncontrado.telefone ?? '-'}
+          </Text>
+          <View style={[styles.buttonsRow, { marginTop: 8 }]}>
+            <TouchableOpacity style={styles.buttonSmall} onPress={() => startEdit(clienteEncontrado)}>
+              <Text style={styles.buttonSmallText}>Editar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.buttonSmall, styles.buttonDelete]}
+              onPress={() => deleteCliente(clienteEncontrado.id)}
+            >
+              <Text style={styles.buttonSmallText}>Excluir</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Formulário */}
+      <Text style={[styles.subtitulo, { marginTop: 12 }]}>
+        {idEditar ? '✏️ Editar Cliente' : '➕ Adicionar Cliente'}
+      </Text>
+      <TextInput style={styles.input} placeholder="Nome" value={nome} onChangeText={setNome} />
       <TextInput
         style={styles.input}
         placeholder="CPF"
@@ -154,18 +263,81 @@ export default function App() {
         keyboardType="phone-pad"
       />
 
-      {idEditar ? (
-        <Button title="Atualizar Cliente" onPress={updateCliente} />
-      ) : (
-        <Button title="Adicionar Cliente" onPress={addCliente} />
-      )}
+      <View style={styles.actionRow}>
+        {idEditar ? (
+          <>
+            <TouchableOpacity style={styles.button} onPress={updateCliente}>
+              <Text style={styles.buttonText}>Atualizar Cliente</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.button, styles.buttonClear]}
+              onPress={() => {
+                setIdEditar(null);
+                limparFormulario();
+              }}
+            >
+              <Text style={styles.buttonText}>Cancelar</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <TouchableOpacity style={styles.button} onPress={addCliente}>
+            <Text style={styles.buttonText}>Adicionar Cliente</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, marginTop: 40 },
-  titulo: { fontSize: 22, fontWeight: 'bold', marginBottom: 10 },
-  input: { borderWidth: 1, borderColor: '#ccc', padding: 8, marginVertical: 5, borderRadius: 5 },
-  card: { padding: 10, marginVertical: 5, borderWidth: 1, borderRadius: 5 }
+  container: { flex: 1, padding: 20, paddingTop: 40 },
+  titulo: { fontSize: 22, fontWeight: '700', marginBottom: 10 },
+  flatlist: { flexGrow: 0, marginBottom: 12 },
+  cardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    marginVertical: 6,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    backgroundColor: '#fff'
+  },
+  cardContent: { flex: 1, paddingRight: 8 },
+  card: {
+    padding: 12,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    backgroundColor: '#fff'
+  },
+  nome: { fontSize: 16, fontWeight: '600' },
+  pequeno: { fontSize: 12, color: '#666', marginTop: 4 },
+  input: { borderWidth: 1, borderColor: '#ccc', padding: 10, marginVertical: 6, borderRadius: 6 },
+  actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 6 },
+  button: {
+    marginBottom: 13,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: '#1976D2',
+    borderRadius: 6,
+    marginRight: 8
+  },
+  buttonClear: {
+    backgroundColor: '#777'
+  },
+  buttonText: { color: '#fff', fontWeight: '600' },
+  buttonSmall: {
+marginTop: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    backgroundColor: '#1976D2',
+    marginLeft: 6
+  },
+  buttonSmallText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  buttonDelete: { backgroundColor: '#D32F2F' },
+  subtitulo: { fontSize: 16, fontWeight: '600', marginTop: 10 },
+  erro: { color: '#D32F2F', marginTop: 6 }
 });
