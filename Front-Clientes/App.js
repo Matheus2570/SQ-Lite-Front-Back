@@ -9,7 +9,7 @@ import {
   TouchableOpacity
 } from 'react-native';
 
-const API_URL = 'http://192.168.107.27:3000/clientes';
+const API_URL = 'http://(Coloque seu IP Aqui):3000/clientes';
 
 export default function App() {
   const [clientes, setClientes] = useState([]);
