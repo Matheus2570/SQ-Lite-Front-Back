@@ -9,7 +9,7 @@ import {
   TouchableOpacity
 } from 'react-native';
 
-const API_URL = 'http://(Coloque seu IP Aqui):3000/clientes';
+const API_URL = 'http://10.136.38.166:3000/clientes'; // laura IP
 
 export default function App() {
   const [clientes, setClientes] = useState([]);
